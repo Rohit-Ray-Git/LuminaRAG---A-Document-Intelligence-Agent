@@ -2,34 +2,33 @@ import sys
 import os
 import asyncio
 import streamlit as st
-from dotenv import load_dotenv
 
-# App paths
+# --- System Path for Imports ---
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-# Set event loop policy for Windows
+# --- Asyncio Fix for Windows + Google GenAI ---
 if sys.platform.startswith('win'):
     try:
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     except Exception:
         pass
-
-# Load environment variables
-load_dotenv()
-os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
-
-# DeepSeek + Embedding + VectorDB
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from app.retrieval.vectorstore import VectorStore
-from app.retrieval.ingest import process_pdf
-from app.utils.deepseek_llm import call_groq_deepseek, filter_think_tags
-
 try:
     asyncio.get_running_loop()
 except RuntimeError:
     asyncio.set_event_loop(asyncio.new_event_loop())
 
-# Set up Google Embeddings and Vector Store
+# --- App Imports ---
+from app.retrieval.vectorstore import VectorStore
+from app.retrieval.ingest import process_pdf
+from app.utils.deepseek_llm import call_groq_deepseek, filter_think_tags
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from dotenv import load_dotenv
+
+# --- Load API Keys ---
+load_dotenv()
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
+
+# --- Vector Store Setup ---
 EMBEDDING_MODEL = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 VECTOR_DB_PATH = "./vector_db"
 COLLECTION_NAME = "luminarag_docs"
@@ -39,52 +38,54 @@ vector_store = VectorStore(
     embedding_function=EMBEDDING_MODEL
 )
 
-# Streamlit Page Config
+# --- Streamlit Page Setup ---
 st.set_page_config(page_title="LuminaRAG - Ask Your Document", layout="centered")
 
-# Optional Styling
 st.markdown("""
 <style>
 body {
     background-color: #0d1117;
     color: white;
 }
-h1, h2, h3, h4 {
+h1, h2, h3, h4, h5, h6 {
     color: white;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize Session State
+# --- Session State ---
 if "processed_files" not in st.session_state:
     st.session_state["processed_files"] = []
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
-if "user_question" not in st.session_state:
-    st.session_state["user_question"] = ""
 
-# ---------- Sidebar: Chat History ----------
+# --- Sidebar: Chat History ---
 with st.sidebar:
-    st.markdown("## 📂 Chat History")
+    st.markdown("## 🗂️ Chat History")
     if st.session_state["chat_history"]:
         for i, item in enumerate(st.session_state["chat_history"], 1):
             st.markdown(f"**{i}.** ❓ {item['question']}<br>👉 {item['answer']}", unsafe_allow_html=True)
     else:
         st.info("No chat history yet.")
+
     st.markdown("---")
     if st.button("🧹 Clear History"):
         st.session_state["chat_history"] = []
         st.success("Chat history cleared!")
 
-# ---------- Title ----------
+# --- Header ---
 st.markdown("""
-<h1 style="text-align: center; font-size: 2.5rem;">
-📄 LuminaRAG - Ask Your Document
+<h1 style="text-align: center; font-size: 2.8em;">
+    📄 LuminaRAG - Ask Your Document
 </h1>
 """, unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
-# ---------- Upload PDFs ----------
-uploaded_files = st.file_uploader("Upload PDF files here 👇", type=["pdf"], accept_multiple_files=True)
+# --- Upload PDFs ---
+uploaded_files = st.file_uploader(
+    "Upload PDF files here 👇", type=["pdf"], accept_multiple_files=True
+)
+
 if uploaded_files:
     with st.spinner("Processing and indexing uploaded files..."):
         for file in uploaded_files:
@@ -97,43 +98,51 @@ if uploaded_files:
                     vector_store.add_documents(docs=texts, metadatas=metadatas, ids=ids)
                     st.session_state["processed_files"].append(file.name)
                     st.success(f"Ingested and indexed: {file.name}")
-                else:
-                    st.error(f"Failed to process: {file.name}")
 
-# ---------- Ask a Question ----------
+# --- Ask a Question Section ---
 if st.session_state["processed_files"]:
     with st.container():
         st.markdown("""
         <div style="background-color:#161b22; padding: 2rem; border-radius: 20px; box-shadow: 0 0 20px rgba(255,255,255,0.05);">
             <h3 style="text-align:center;">💬 Ask a Question</h3>
-        </div>
         """, unsafe_allow_html=True)
 
-        question = st.text_input("Enter your question:", key="user_question", label_visibility="collapsed")
+        # FORM — handles input and submit
+        with st.form("question_form", clear_on_submit=True):
+            question = st.text_input("Enter your question:", label_visibility="collapsed")
+            submit = st.form_submit_button("🔍 Get Answer")
 
-        if st.button("🔍 Get Answer") and question.strip() != "":
-            with st.spinner("Generating answer..."):
-                docs, _ = vector_store.query(question, n_results=5)
-                flat_docs = [doc for sublist in docs for doc in sublist]
-                context = "\n\n".join(flat_docs)
-                answer = call_groq_deepseek(question, context)
-                clean_answer = filter_think_tags(answer)
+            if submit and question:
+                with st.spinner("Generating answer..."):
+                    docs, metadatas = vector_store.query(question, n_results=5)
+                    flat_docs = [doc for sublist in docs for doc in sublist]  # flatten list of lists
+                    context = "\n\n".join(flat_docs)
 
-            st.success(clean_answer)
+                    answer = call_groq_deepseek(question, context)
+                    clean_answer = filter_think_tags(answer)
 
-            # Save to chat history
-            st.session_state.chat_history.append({
-                "question": question,
-                "answer": clean_answer
-            })
+                # Save to temp session to survive rerun
+                st.session_state.last_q = question
+                st.session_state.last_a = clean_answer
+                st.rerun()
 
-            # Clear input and rerun
-            st.session_state.user_question = ""
-            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# ✅ Save conversation to history after rerun
+if "last_q" in st.session_state and "last_a" in st.session_state:
+    st.session_state.chat_history.append({
+        "question": st.session_state.last_q,
+        "answer": st.session_state.last_a
+    })
+    st.success(st.session_state.last_a)
+    del st.session_state.last_q
+    del st.session_state.last_a
+
 else:
-    st.info("👆 Upload a PDF to ask questions.")
+    if not st.session_state["processed_files"]:
+        st.info("👆 Upload a PDF to ask questions below.")
 
-# ---------- Footer ----------
+# --- Footer ---
 st.markdown("""
 <div style='text-align: center; margin-top: 2rem; font-size: 1.1rem; color: #9ca3af;'>
     LuminaRAG is a Retrieval-Augmented Generation (RAG) agent that answers your questions using your
