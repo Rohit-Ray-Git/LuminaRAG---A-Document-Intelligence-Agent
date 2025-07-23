@@ -1,9 +1,12 @@
+import asyncio
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import streamlit as st
 from app.retrieval.vectorstore import VectorStore
 from app.retrieval.ingest import process_pdf
 from app.utils.deepseek_llm import call_deepseek_r1
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-import os
 from dotenv import load_dotenv
 
 # --- Load environment variables ---
@@ -26,6 +29,11 @@ if "uploaded_files" not in st.session_state:
     st.session_state["uploaded_files"] = []
 if "processed_files" not in st.session_state:
     st.session_state["processed_files"] = []
+
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
 # --- Embedding Model and Vector Store Initialization ---
 EMBEDDING_MODEL = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
