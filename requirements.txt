@@ -1,7 +1,7 @@
 streamlit
 langchain
 langchain_community
-chroma-db
+chromadb
 agno
 ollama
 openai

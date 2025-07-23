@@ -75,3 +75,6 @@ Pipfile.lock
 # Data
 /data/vector_db/
 /data/uploads/ 
+
+# Python virtual environments
+luminarag-venv/ 
