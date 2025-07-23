@@ -1,8 +1,16 @@
 import streamlit as st
 from app.retrieval.vectorstore import VectorStore
 from app.retrieval.ingest import process_pdf
+from app.utils.deepseek_llm import call_deepseek_r1
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import os
+from dotenv import load_dotenv
+
+# --- Load environment variables ---
+load_dotenv()
+# Set Google API key for embedding model
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
+# DeepSeek API key is loaded in the utils module as needed
 
 st.set_page_config(page_title="LuminaRAG - A Document Intelligence Agent", page_icon="📄")
 
@@ -20,8 +28,6 @@ if "processed_files" not in st.session_state:
     st.session_state["processed_files"] = []
 
 # --- Embedding Model and Vector Store Initialization ---
-# Set your Google API key here or use an environment variable
-os.environ["GOOGLE_API_KEY"] = "your-google-api-key"
 EMBEDDING_MODEL = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 VECTOR_DB_PATH = "./vector_db"
 COLLECTION_NAME = "luminarag_docs"
@@ -56,16 +62,14 @@ st.header("Chat History")
 for msg in st.session_state["history"]:
     st.write(f"**{msg['role'].capitalize()}:** {msg['content']}")
 
-# --- Retrieval and Answer Generation ---
+# --- Retrieval and DeepSeek LLM Answer Generation ---
 if prompt:
     st.session_state["history"].append({"role": "user", "content": prompt})
-    # Retrieve relevant chunks from the vector store
     docs, metadatas = vector_store.query(prompt, n_results=5)
     if docs:
         context = "\n\n".join([doc for doc in docs[0]]) if isinstance(docs[0], list) else "\n\n".join(docs)
-        # TODO: Integrate LLM here to generate a final answer using the context
-        answer = f"[Context from documents]\n{context}\n\n[LLM Answer Placeholder]"
+        answer = call_deepseek_r1(prompt, context)
     else:
-        answer = "No relevant context found in your documents. [LLM Answer Placeholder]"
+        answer = call_deepseek_r1(prompt, "")
     st.session_state["history"].append({"role": "assistant", "content": answer})
     st.write(f"**Assistant:** {answer}") 
