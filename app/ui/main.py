@@ -51,16 +51,17 @@ uploaded_files = st.file_uploader("Upload PDF files", type=["pdf"], accept_multi
 if uploaded_files:
     for file in uploaded_files:
         if file.name not in st.session_state["processed_files"]:
-            docs = process_pdf(file)
-            if docs:
-                ids = [f"{file.name}-{i}" for i in range(len(docs))]
-                texts = [doc.page_content for doc in docs]
-                metadatas = [doc.metadata for doc in docs]
-                vector_store.add_documents(docs=texts, metadatas=metadatas, ids=ids)
-                st.session_state["processed_files"].append(file.name)
-                st.success(f"Ingested and indexed: {file.name}")
-            else:
-                st.error(f"Failed to process: {file.name}")
+            with st.spinner(f"Processing and indexing {file.name}..."):
+                docs = process_pdf(file)
+                if docs:
+                    ids = [f"{file.name}-{i}" for i in range(len(docs))]
+                    texts = [doc.page_content for doc in docs]
+                    metadatas = [doc.metadata for doc in docs]
+                    vector_store.add_documents(docs=texts, metadatas=metadatas, ids=ids)
+                    st.session_state["processed_files"].append(file.name)
+                    st.success(f"Ingested and indexed: {file.name}")
+                else:
+                    st.error(f"Failed to process: {file.name}")
         else:
             st.info(f"Already processed: {file.name}")
 
@@ -79,9 +80,11 @@ if prompt:
     docs, metadatas = vector_store.query(prompt, n_results=5)
     if docs:
         context = "\n\n".join([doc for doc in docs[0]]) if isinstance(docs[0], list) else "\n\n".join(docs)
-        answer = call_groq_deepseek(prompt, context)
+        with st.spinner("Generating answer..."):
+            answer = call_groq_deepseek(prompt, context)
     else:
-        answer = call_groq_deepseek(prompt, "")
+        with st.spinner("Generating answer..."):
+            answer = call_groq_deepseek(prompt, "")
     clean_answer = filter_think_tags(answer)
     st.session_state["history"].append({"role": "assistant", "content": clean_answer})
     st.write(f"**Assistant:** {clean_answer}") 
