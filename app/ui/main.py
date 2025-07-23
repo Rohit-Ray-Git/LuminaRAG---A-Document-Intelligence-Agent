@@ -1,19 +1,22 @@
-import asyncio
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+import asyncio
+if sys.platform.startswith('win'):
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass
 import streamlit as st
 from app.retrieval.vectorstore import VectorStore
 from app.retrieval.ingest import process_pdf
-from app.utils.deepseek_llm import call_deepseek_r1
+from app.utils.deepseek_llm import call_groq_deepseek, filter_think_tags
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from dotenv import load_dotenv
 
 # --- Load environment variables ---
 load_dotenv()
-# Set Google API key for embedding model
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
-# DeepSeek API key is loaded in the utils module as needed
 
 st.set_page_config(page_title="LuminaRAG - A Document Intelligence Agent", page_icon="📄")
 
@@ -70,14 +73,15 @@ st.header("Chat History")
 for msg in st.session_state["history"]:
     st.write(f"**{msg['role'].capitalize()}:** {msg['content']}")
 
-# --- Retrieval and DeepSeek LLM Answer Generation ---
+# --- Retrieval and Groq DeepSeek LLM Answer Generation ---
 if prompt:
     st.session_state["history"].append({"role": "user", "content": prompt})
     docs, metadatas = vector_store.query(prompt, n_results=5)
     if docs:
         context = "\n\n".join([doc for doc in docs[0]]) if isinstance(docs[0], list) else "\n\n".join(docs)
-        answer = call_deepseek_r1(prompt, context)
+        answer = call_groq_deepseek(prompt, context)
     else:
-        answer = call_deepseek_r1(prompt, "")
-    st.session_state["history"].append({"role": "assistant", "content": answer})
-    st.write(f"**Assistant:** {answer}") 
+        answer = call_groq_deepseek(prompt, "")
+    clean_answer = filter_think_tags(answer)
+    st.session_state["history"].append({"role": "assistant", "content": clean_answer})
+    st.write(f"**Assistant:** {clean_answer}") 
