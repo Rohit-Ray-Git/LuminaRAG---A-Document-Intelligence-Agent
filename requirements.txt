@@ -9,5 +9,6 @@ openai
 google-generativeai
 python-dotenv
 PyPDF2
+PyPDF
 requests 
 dotenv
