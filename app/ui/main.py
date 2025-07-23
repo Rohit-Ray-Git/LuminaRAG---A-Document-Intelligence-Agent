@@ -56,10 +56,16 @@ st.header("Chat History")
 for msg in st.session_state["history"]:
     st.write(f"**{msg['role'].capitalize()}:** {msg['content']}")
 
-# --- Placeholder for Answer ---
+# --- Retrieval and Answer Generation ---
 if prompt:
-    # TODO: Integrate retrieval and agent logic here
-    answer = f"[Placeholder] Answer to: {prompt}"
     st.session_state["history"].append({"role": "user", "content": prompt})
+    # Retrieve relevant chunks from the vector store
+    docs, metadatas = vector_store.query(prompt, n_results=5)
+    if docs:
+        context = "\n\n".join([doc for doc in docs[0]]) if isinstance(docs[0], list) else "\n\n".join(docs)
+        # TODO: Integrate LLM here to generate a final answer using the context
+        answer = f"[Context from documents]\n{context}\n\n[LLM Answer Placeholder]"
+    else:
+        answer = "No relevant context found in your documents. [LLM Answer Placeholder]"
     st.session_state["history"].append({"role": "assistant", "content": answer})
     st.write(f"**Assistant:** {answer}") 
