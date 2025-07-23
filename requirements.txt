@@ -1,0 +1,11 @@
+streamlit
+langchain
+langchain_community
+chroma-db
+agno
+ollama
+openai
+google-generativeai
+python-dotenv
+PyPDF2
+requests 
