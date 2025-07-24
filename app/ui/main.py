@@ -148,7 +148,9 @@ if st.session_state["processed_files"]:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-# After the input/form, always display the last answer if present
+# After the input/form, always display the last question and answer if present
+if "last_question" in st.session_state and st.session_state["last_question"]:
+    st.markdown(f"**❓ {st.session_state['last_question']}**")
 if "last_answer" in st.session_state and st.session_state["last_answer"]:
     st.success(st.session_state["last_answer"])
 
