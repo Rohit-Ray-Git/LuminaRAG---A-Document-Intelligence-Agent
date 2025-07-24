@@ -21,7 +21,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
 
 # --- Set Google API Key ---
-os.environ["GOOGLE_API_KEY"] = "AIzaSyCr35hxFrpVsbNWgqOwU6PwmkpwLmO2dJA"
+os.environ["GOOGLE_API_KEY"] = "YOUR_API_KEY"
 
 # --- Constants ---
 COLLECTION_NAME = "deepseek_rag"
