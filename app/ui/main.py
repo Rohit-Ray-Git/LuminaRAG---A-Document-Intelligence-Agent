@@ -132,7 +132,9 @@ if st.session_state["processed_files"]:
                         st.write("DEBUG: Context for LLM:", context)
                         answer = call_groq_deepseek(question, context)
                     elif st.session_state["web_search_enabled"]:
-                        with st.spinner("Searching the web and summarizing..."):
+                        # Show a message and spinner for web search fallback
+                        with st.spinner("Searching the web and summarizing with Gemini..."):
+                            st.info("No answer found in your documents. Searching the web for the answer...", icon="🌐")
                             web_results = duckduckgo_search(question)
                             st.write("DEBUG: Web search results:", web_results)
                             answer = gemini_summarize_web_results(question, web_results)
