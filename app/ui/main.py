@@ -23,6 +23,8 @@ from app.retrieval.ingest import process_pdf
 from app.utils.deepseek_llm import call_groq_deepseek, filter_think_tags
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from dotenv import load_dotenv
+from app.utils.web_search import duckduckgo_search
+from app.utils.gemini_summarizer import gemini_summarize_web_results
 
 # --- Load API Keys ---
 load_dotenv()
@@ -58,6 +60,8 @@ if "processed_files" not in st.session_state:
     st.session_state["processed_files"] = []
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
+if "web_search_enabled" not in st.session_state:
+    st.session_state["web_search_enabled"] = False
 
 # --- Sidebar: Chat History ---
 with st.sidebar:
@@ -69,7 +73,8 @@ with st.sidebar:
         st.info("No chat history yet.")
 
     st.markdown("---")
-    if st.button("🧹 Clear History"):
+    st.session_state["web_search_enabled"] = st.checkbox("Enable Web Search Fallback 🌐", value=st.session_state["web_search_enabled"])
+    if st.button("🗑️ Clear History"):
         st.session_state["chat_history"] = []
         st.success("Chat history cleared!")
 
@@ -87,6 +92,11 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
+    # Clear vector store and processed_files for new uploads
+    all_ids = vector_store.collection.get()["ids"]
+    if all_ids:
+        vector_store.collection.delete(ids=all_ids)
+    st.session_state["processed_files"] = []
     with st.spinner("Processing and indexing uploaded files..."):
         for file in uploaded_files:
             if file.name not in st.session_state["processed_files"]:
@@ -113,30 +123,34 @@ if st.session_state["processed_files"]:
             submit = st.form_submit_button("🔍 Get Answer")
 
             if submit and question:
+                st.write("DEBUG: Question received:", question)
                 with st.spinner("Generating answer..."):
                     docs, metadatas = vector_store.query(question, n_results=5)
-                    flat_docs = [doc for sublist in docs for doc in sublist]  # flatten list of lists
-                    context = "\n\n".join(flat_docs)
-
-                    answer = call_groq_deepseek(question, context)
-                    clean_answer = filter_think_tags(answer)
-
-                # Save to temp session to survive rerun
-                st.session_state.last_q = question
-                st.session_state.last_a = clean_answer
+                    st.write("DEBUG: Retrieved docs:", docs)
+                    if docs:
+                        context = "\n\n".join([doc for doc in docs[0]]) if isinstance(docs[0], list) else "\n\n".join(docs)
+                        st.write("DEBUG: Context for LLM:", context)
+                        answer = call_groq_deepseek(question, context)
+                    elif st.session_state["web_search_enabled"]:
+                        with st.spinner("Searching the web and summarizing..."):
+                            web_results = duckduckgo_search(question)
+                            st.write("DEBUG: Web search results:", web_results)
+                            answer = gemini_summarize_web_results(question, web_results)
+                    else:
+                        st.write("DEBUG: No docs found, calling LLM with empty context.")
+                        answer = call_groq_deepseek(question, "")
+                    st.write("DEBUG: Raw LLM answer:", answer)
+                clean_answer = filter_think_tags(answer)
+                st.session_state.chat_history.append({"question": question, "answer": clean_answer})
+                st.session_state["last_answer"] = clean_answer
+                st.session_state["last_question"] = question
                 st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ✅ Save conversation to history after rerun
-if "last_q" in st.session_state and "last_a" in st.session_state:
-    st.session_state.chat_history.append({
-        "question": st.session_state.last_q,
-        "answer": st.session_state.last_a
-    })
-    st.success(st.session_state.last_a)
-    del st.session_state.last_q
-    del st.session_state.last_a
+# After the input/form, always display the last answer if present
+if "last_answer" in st.session_state and st.session_state["last_answer"]:
+    st.success(st.session_state["last_answer"])
 
 else:
     if not st.session_state["processed_files"]:
