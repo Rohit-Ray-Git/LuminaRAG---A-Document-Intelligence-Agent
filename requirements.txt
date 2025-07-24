@@ -12,3 +12,4 @@ PyPDF2
 PyPDF
 requests 
 dotenv
+beautifulsoup4
